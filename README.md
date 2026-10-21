@@ -21,7 +21,7 @@ O projeto também tem como objetivo aplicar boas práticas de engenharia de soft
 1. Clone o repositório:
 
    ```powershell
-   git clone <URL_DO_REPOSITORIO>
+   git clone https://github.com/vitortbarboza/document-intelligence-api.git
    ```
 
 2. Acesse o diretório do projeto:
