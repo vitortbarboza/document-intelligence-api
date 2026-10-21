@@ -1,0 +1,12 @@
+# Python virtual environment
+.venv/
+
+# Pytest cache
+.pytest_cache/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Python package metadata
+*.egg-info/
