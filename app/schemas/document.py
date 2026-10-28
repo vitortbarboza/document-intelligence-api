@@ -10,10 +10,16 @@ from pydantic import (
 )
 
 
+TITLE_MAX_LENGTH = 200
+
 # Whitespace is stripped before the length limits are checked.
 Title = Annotated[
     str,
-    StringConstraints(strip_whitespace=True, min_length=1, max_length=200),
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=TITLE_MAX_LENGTH,
+    ),
 ]
 Description = Annotated[
     str,
@@ -32,6 +38,9 @@ class DocumentResponse(BaseModel):
     id: int
     title: str
     description: str
+    filename: str | None = None
+    page_count: int | None = None
+    extracted_text: str | None = None
 
 
 class DocumentUpdate(BaseModel):
