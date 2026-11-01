@@ -10,8 +10,10 @@ from app.services.document_service import (
 
 
 # Verify that an uploaded PDF is stored with its extracted metadata.
-def test_create_document_from_pdf():
+def test_create_document_from_pdf(db_session):
+    # Create a PDF document using the database session.
     document = create_document_from_pdf(
+        db=db_session,
         filename="example.pdf",
         page_count=3,
         extracted_text="Example extracted text",
@@ -24,29 +26,34 @@ def test_create_document_from_pdf():
     assert document.page_count == 3
     assert document.extracted_text == "Example extracted text"
 
-    stored_document = get_document(document.id)
+    # Retrieve the persisted document from SQLite.
+    stored_document = get_document(db_session, document.id)
 
     assert stored_document == document
 
 
-# Verify that manual documents and uploaded PDFs share the same ID counter.
-def test_documents_share_id_counter():
+# Verify that manual documents and uploaded PDFs share the same database ID sequence.
+def test_documents_share_database_id_sequence(db_session):
     manual_document = create_document(
-        DocumentCreate(
+        db=db_session,
+        document=DocumentCreate(
             title="Manual document",
             description="Created through the CRUD service",
-        )
+        ),
     )
 
     pdf_document = create_document_from_pdf(
+        db=db_session,
         filename="report.pdf",
         page_count=2,
         extracted_text="Report content",
     )
 
     assert pdf_document.id == manual_document.id + 1
-    assert get_document(manual_document.id) == manual_document
-    assert get_document(pdf_document.id) == pdf_document
+
+    # Verify both documents were persisted.
+    assert get_document(db_session, manual_document.id) == manual_document
+    assert get_document(db_session, pdf_document.id) == pdf_document
 
 
 # Verify that uploaded filenames are normalized into valid document titles.
@@ -85,8 +92,9 @@ def test_normalize_filename(filename, expected):
 
 
 # Verify that the stored title and filename both use the normalized name.
-def test_create_document_from_pdf_normalizes_filename():
+def test_create_document_from_pdf_normalizes_filename(db_session):
     document = create_document_from_pdf(
+        db=db_session,
         filename="C:\\fakepath\\" + "A" * 300 + ".pdf",
         page_count=1,
         extracted_text="",
@@ -94,3 +102,9 @@ def test_create_document_from_pdf_normalizes_filename():
 
     assert document.title == "A" * 196 + ".pdf"
     assert document.filename == document.title
+
+    # Verify that the normalized filename was persisted.
+    stored_document = get_document(db_session, document.id)
+
+    assert stored_document is not None
+    assert stored_document.filename == document.filename

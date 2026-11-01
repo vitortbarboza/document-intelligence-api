@@ -12,6 +12,8 @@ dependencies = [
     "uvicorn[standard]>=0.54",
     "python-multipart>=0.0.32",
     "pymupdf>=1.26,<2.0",
+    "sqlalchemy>=2.0,<3.0",
+    "alembic>=1.14,<2.0",
 ]
 
 [dependency-groups]

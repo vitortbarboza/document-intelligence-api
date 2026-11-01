@@ -4,7 +4,7 @@
 
 O **Document Intelligence API** é um projeto desenvolvido em Python com FastAPI, cujo objetivo é construir uma API para processamento e análise inteligente de documentos.
 
-Atualmente, a aplicação oferece uma API REST para gerenciamento de documentos, com operações CRUD, upload de arquivos PDF com extração de texto, validação de dados e testes automatizados.
+Atualmente, a aplicação oferece uma API REST para gerenciamento de documentos, com operações CRUD, upload de arquivos PDF com extração de texto, persistência em banco de dados SQLite, migrações versionadas, validação de dados e testes automatizados.
 
 Nas próximas etapas, o projeto será expandido para incluir divisão de texto em chunks, embeddings, **Retrieval-Augmented Generation (RAG)** e integração com modelos de linguagem (LLMs), permitindo consultar informações presentes nos documentos.
 
@@ -16,6 +16,9 @@ O projeto também tem como objetivo aplicar boas práticas de engenharia de soft
 - FastAPI
 - Pydantic
 - Uvicorn
+- SQLAlchemy (ORM)
+- SQLite
+- Alembic
 - PyMuPDF
 - python-multipart
 - pytest
@@ -35,7 +38,8 @@ O projeto também tem como objetivo aplicar boas práticas de engenharia de soft
 - Limites de processamento para quantidade de páginas e tamanho do texto extraído.
 - Validação e normalização dos dados recebidos.
 - Tratamento de erros HTTP.
-- Armazenamento temporário em memória.
+- Persistência dos documentos em banco de dados SQLite.
+- Migrações de banco de dados versionadas com Alembic.
 - Testes automatizados.
 
 ## Estrutura do projeto
@@ -46,14 +50,25 @@ app/
 ├── api/routes/
 │   ├── documents.py                 # Endpoints de documentos e upload
 │   └── health.py                    # Health check
+├── db/
+│   └── database.py                  # Engine, sessões e dependência get_db
+├── models/
+│   └── document.py                  # Modelo ORM da tabela documents
+├── repositories/
+│   └── document_repository.py       # Operações de banco de dados (CRUD)
 ├── schemas/
 │   └── document.py                  # Schemas Pydantic
 └── services/
-    ├── document_service.py          # Regras de negócio e armazenamento em memória
+    ├── document_service.py          # Regras de negócio dos documentos
     ├── pdf_service.py               # Validação e leitura do arquivo enviado
     └── pdf_extraction_service.py    # Extração de texto com PyMuPDF
+alembic/
+└── versions/                        # Migrações do banco de dados
+alembic.ini                          # Configuração do Alembic
 tests/                               # Testes automatizados
 ```
+
+As requisições seguem o fluxo **rotas → services → repositório → banco de dados**. Os services convertem os objetos ORM em schemas Pydantic, de modo que as rotas não manipulam diretamente os modelos do banco.
 
 ## Instalação
 
@@ -95,9 +110,17 @@ tests/                               # Testes automatizados
    python -m pip install --group dev
    ```
 
+6. Crie o banco de dados aplicando as migrações:
+
+   ```powershell
+   python -m alembic upgrade head
+   ```
+
+   Esse passo é obrigatório antes da primeira execução da API e sempre que novas migrações forem adicionadas. Sem ele, a tabela `documents` não existe e as requisições retornam erro `500`.
+
 ## Execução da API
 
-Com o ambiente virtual ativado, execute o seguinte comando na raiz do projeto:
+Com o ambiente virtual ativado e as migrações aplicadas, execute o seguinte comando na raiz do projeto:
 
 ```powershell
 python -m uvicorn app.main:app --reload
@@ -109,6 +132,41 @@ A API estará disponível nos seguintes endereços:
 - **Documentação interativa (Swagger UI):** http://127.0.0.1:8000/docs
 
 O endereço raiz (`/`) também redireciona para a documentação Swagger.
+
+## Banco de dados e migrações
+
+Os documentos são armazenados em um banco SQLite. Por padrão, o arquivo `documents.db` fica na raiz do projeto, independentemente do diretório a partir do qual a API ou o Alembic são executados.
+
+Para utilizar outro arquivo, defina a variável de ambiente `DATABASE_URL` antes de executar a API e o Alembic:
+
+```powershell
+$env:DATABASE_URL = "sqlite:///C:/caminho/para/outro.db"
+```
+
+Os arquivos de banco (`*.db`) são ignorados pelo Git.
+
+Os IDs são gerados pelo banco com `AUTOINCREMENT`, portanto o ID de um documento excluído nunca é reutilizado.
+
+### Comandos úteis do Alembic
+
+| Comando | Descrição |
+|---|---|
+| `python -m alembic upgrade head` | Aplica todas as migrações pendentes |
+| `python -m alembic current` | Mostra a revisão atual do banco |
+| `python -m alembic history` | Lista as migrações existentes |
+| `python -m alembic downgrade -1` | Reverte a última migração |
+| `python -m alembic check` | Verifica se os modelos e as migrações estão sincronizados |
+| `python -m alembic revision --autogenerate -m "descricao"` | Gera uma nova migração a partir das mudanças nos modelos |
+
+Também é possível executar um comando em outro banco sem alterar a variável de ambiente:
+
+```powershell
+python -m alembic -x db_url=sqlite:///C:/caminho/para/outro.db upgrade head
+```
+
+Como o SQLite não suporta a maioria das alterações de tabela (`ALTER TABLE`), o Alembic está configurado com `render_as_batch=True`. Assim, as migrações geradas recriam a tabela quando necessário.
+
+Antes de aplicar migrações em um banco com dados importantes, recomenda-se fazer uma cópia do arquivo `.db`. Migrações geradas automaticamente devem sempre ser revisadas antes de serem aplicadas.
 
 ## Endpoints
 
@@ -217,29 +275,32 @@ python -m pytest -v
 
 Os testes estão localizados no diretório `tests/`.
 
+Os testes não utilizam o arquivo `documents.db`. Cada teste recebe um banco SQLite em memória, criado do zero e descartado ao final. Nos testes da API, cada requisição usa uma sessão de banco própria, como em produção, e as verificações são feitas em uma sessão separada; assim, dados que não foram efetivamente gravados (sem `commit`) são detectados.
+
 Os testes automatizados cobrem:
 
 - Operações CRUD, validações de dados, tratamento de erros e normalização de textos.
+- Persistência no banco de dados, operações do repositório e rollback após erros de integridade.
+- Migrações: aplicação completa (`upgrade`), sincronização entre modelos e migrações (`check`), reversão (`downgrade`) e configuração do `AUTOINCREMENT`.
 - Upload de PDFs válidos, com uma ou várias páginas e sem texto extraível.
 - Rejeição de tipos de arquivo inválidos, assinaturas inválidas e arquivos acima de 10 MiB.
 - PDFs corrompidos, protegidos por senha e erros internos do PyMuPDF.
 - Limites de páginas e de tamanho do texto extraído.
 - Normalização de nomes de arquivos.
 - Ciclo CRUD completo de documentos criados por upload.
-- Isolamento entre testes, com o armazenamento e o contador de IDs reiniciados a cada teste.
 
 ## Limitações atuais
 
-- Os documentos são armazenados em memória utilizando um dicionário Python, portanto os dados são perdidos quando a aplicação é reiniciada.
+- O SQLite armazena os dados em um único arquivo e tem suporte limitado a escritas concorrentes, sendo adequado para desenvolvimento e uso local.
+- O acesso ao banco de dados é síncrono.
 - Os arquivos PDF não são armazenados; apenas os metadados e o texto extraído são mantidos.
 - Não há OCR: PDFs digitalizados (compostos apenas por imagens) resultam em texto vazio.
 - O limite de 10 MiB é verificado pela aplicação depois que o corpo da requisição já foi recebido e armazenado temporariamente pelo servidor. Para bloquear requisições muito grandes antes disso, é necessário configurar um limite em um proxy reverso ou em um middleware.
 - A extração de texto é executada de forma síncrona e pode bloquear outras requisições durante o processamento de PDFs grandes.
-- A listagem de documentos retorna o texto extraído completo de cada PDF.
+- A listagem de documentos não possui paginação e retorna o texto extraído completo de cada PDF.
 
 ## Próximas etapas
 
-- Adicionar persistência de dados.
 - Implementar a divisão do texto extraído em chunks.
 - Integrar embeddings e busca vetorial.
 - Desenvolver um pipeline RAG.

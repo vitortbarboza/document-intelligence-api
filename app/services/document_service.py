@@ -1,6 +1,8 @@
-from itertools import count
 from pathlib import PurePosixPath
 
+from sqlalchemy.orm import Session
+
+from app.repositories import document_repository
 from app.schemas.document import (
     TITLE_MAX_LENGTH,
     DocumentCreate,
@@ -11,58 +13,81 @@ from app.schemas.document import (
 
 DEFAULT_PDF_FILENAME = "untitled.pdf"
 
-documents: dict[int, DocumentResponse] = {}
-document_id_counter = count(start=1)
 
-
-def create_document(document: DocumentCreate) -> DocumentResponse:
-    document_id = next(document_id_counter)
-
-    new_document = DocumentResponse(
-        id=document_id,
+def create_document(
+    db: Session,
+    document: DocumentCreate,
+) -> DocumentResponse:
+    # Persist the document using the repository.
+    new_document = document_repository.create_document(
+        db=db,
         title=document.title,
         description=document.description,
     )
 
-    documents[document_id] = new_document
-
-    return new_document
-
-
-def list_documents() -> list[DocumentResponse]:
-    return list(documents.values())
+    # Convert the ORM object into a Pydantic response.
+    return DocumentResponse.model_validate(new_document)
 
 
-def get_document(document_id: int) -> DocumentResponse | None:
-    return documents.get(document_id)
+def list_documents(db: Session) -> list[DocumentResponse]:
+    # Retrieve all documents from the database.
+    stored_documents = document_repository.get_all_documents(db)
+
+    # Convert ORM objects into Pydantic responses.
+    return [
+        DocumentResponse.model_validate(document)
+        for document in stored_documents
+    ]
+
+
+def get_document(
+    db: Session,
+    document_id: int,
+) -> DocumentResponse | None:
+    # Retrieve the document from the database.
+    document = document_repository.get_document_by_id(
+        db=db,
+        document_id=document_id,
+    )
+
+    if document is None:
+        return None
+
+    # Convert the ORM object into a Pydantic response.
+    return DocumentResponse.model_validate(document)
 
 
 def update_document(
+    db: Session,
     document_id: int,
     document_update: DocumentUpdate,
 ) -> DocumentResponse | None:
-    existing_document = documents.get(document_id)
-
-    if existing_document is None:
-        return None
-
+    # Extract only the fields provided in the request.
     update_data = document_update.model_dump(exclude_unset=True)
 
-    updated_document = existing_document.model_copy(
-        update=update_data
+    # Update the document in the database.
+    updated_document = document_repository.update_document(
+        db=db,
+        document_id=document_id,
+        **update_data,
     )
 
-    documents[document_id] = updated_document
+    if updated_document is None:
+        return None
 
-    return updated_document
+    # Convert the ORM object into a Pydantic response.
+    return DocumentResponse.model_validate(updated_document)
 
 
-def delete_document(document_id: int) -> bool:
-    if document_id not in documents:
-        return False
-
-    del documents[document_id]
-    return True
+def delete_document(
+    db: Session,
+    document_id: int,
+) -> bool:
+    # Delete the document using the repository.
+    return document_repository.delete_document(
+        db=db,
+        document_id=document_id,
+    )
 
 
 def normalize_filename(filename: str | None) -> str:
@@ -87,18 +112,17 @@ def normalize_filename(filename: str | None) -> str:
 
 
 def create_document_from_pdf(
+    db: Session,
     filename: str | None,
     page_count: int,
     extracted_text: str,
 ) -> DocumentResponse:
+    # Normalize the uploaded filename.
     safe_filename = normalize_filename(filename)
 
-    # Generate an ID using the existing counter.
-    document_id = next(document_id_counter)
-
-    # Create a document with the extracted PDF information.
-    new_document = DocumentResponse(
-        id=document_id,
+    # Persist the extracted PDF information.
+    document = document_repository.create_document(
+        db=db,
         title=safe_filename,
         description="Document uploaded from PDF",
         filename=safe_filename,
@@ -106,7 +130,5 @@ def create_document_from_pdf(
         extracted_text=extracted_text,
     )
 
-    # Store the document in the existing in-memory dictionary.
-    documents[document_id] = new_document
-
-    return new_document
+    # Convert the ORM object into a Pydantic response.
+    return DocumentResponse.model_validate(document)

@@ -1,5 +1,7 @@
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy.orm import Session
 
+from app.db.database import get_db
 from app.schemas.document import (
     DocumentCreate,
     DocumentResponse,
@@ -13,14 +15,13 @@ from app.services.document_service import (
     list_documents as list_documents_service,
     update_document as update_document_service,
 )
-
-from app.services.pdf_service import read_pdf_upload
-
 from app.services.pdf_extraction_service import (
     PDFExtractionError,
     PDFLimitExceededError,
     extract_pdf_data,
 )
+from app.services.pdf_service import read_pdf_upload
+
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -31,8 +32,11 @@ router = APIRouter(prefix="/documents", tags=["documents"])
     response_model_exclude_none=True,
     status_code=status.HTTP_201_CREATED,
 )
-def create_document(document: DocumentCreate) -> DocumentResponse:
-    return create_document_service(document)
+def create_document(
+    document: DocumentCreate,
+    db: Session = Depends(get_db),
+) -> DocumentResponse:
+    return create_document_service(db, document)
 
 
 @router.get(
@@ -40,17 +44,22 @@ def create_document(document: DocumentCreate) -> DocumentResponse:
     response_model=list[DocumentResponse],
     response_model_exclude_none=True,
 )
-def list_documents() -> list[DocumentResponse]:
-    return list_documents_service()
+def list_documents(
+    db: Session = Depends(get_db),
+) -> list[DocumentResponse]:
+    return list_documents_service(db)
 
 
 @router.get(
     "/{document_id}",
     response_model=DocumentResponse,
-    response_model_exclude_none=True
+    response_model_exclude_none=True,
 )
-def get_document(document_id: int) -> DocumentResponse:
-    document = get_document_service(document_id)
+def get_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+) -> DocumentResponse:
+    document = get_document_service(db, document_id)
 
     if document is None:
         raise HTTPException(
@@ -64,13 +73,18 @@ def get_document(document_id: int) -> DocumentResponse:
 @router.patch(
     "/{document_id}",
     response_model=DocumentResponse,
-    response_model_exclude_none=True
+    response_model_exclude_none=True,
 )
 def update_document(
     document_id: int,
     document_update: DocumentUpdate,
+    db: Session = Depends(get_db),
 ) -> DocumentResponse:
-    updated_document = update_document_service(document_id, document_update)
+    updated_document = update_document_service(
+        db,
+        document_id,
+        document_update,
+    )
 
     if updated_document is None:
         raise HTTPException(
@@ -87,8 +101,11 @@ def update_document(
     "/{document_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def delete_document(document_id: int) -> None:
-    deleted = delete_document_service(document_id)
+def delete_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+) -> None:
+    deleted = delete_document_service(db, document_id)
 
     if not deleted:
         raise HTTPException(
@@ -102,7 +119,10 @@ def delete_document(document_id: int) -> None:
     response_model=DocumentResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def upload_document(file: UploadFile = File(...)) -> DocumentResponse:
+async def upload_document(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> DocumentResponse:
     pdf_content = await read_pdf_upload(file)
 
     try:
@@ -119,6 +139,7 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentResponse:
         ) from exc
 
     document = create_document_from_pdf(
+        db=db,
         filename=file.filename,
         page_count=pdf_data["page_count"],
         extracted_text=pdf_data["extracted_text"],

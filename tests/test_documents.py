@@ -9,6 +9,12 @@ from app.services import pdf_extraction_service
 client = TestClient(app)
 
 
+# Override the database dependency with an isolated SQLite database.
+@pytest.fixture(autouse=True)
+def isolate_database(db_client):
+    yield
+
+
 # Verify that a valid document is created successfully.
 # The API should return HTTP 201 and the document with its generated ID.
 def test_create_document_valid():
