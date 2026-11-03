@@ -9,7 +9,6 @@ from pydantic import (
     model_validator,
 )
 
-
 TITLE_MAX_LENGTH = 200
 
 # Whitespace is stripped before the length limits are checked.

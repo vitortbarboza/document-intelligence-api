@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
@@ -9,10 +11,20 @@ from app.schemas.document import (
 )
 from app.services.document_service import (
     create_document as create_document_service,
+)
+from app.services.document_service import (
     create_document_from_pdf,
+)
+from app.services.document_service import (
     delete_document as delete_document_service,
+)
+from app.services.document_service import (
     get_document as get_document_service,
+)
+from app.services.document_service import (
     list_documents as list_documents_service,
+)
+from app.services.document_service import (
     update_document as update_document_service,
 )
 from app.services.pdf_extraction_service import (
@@ -22,6 +34,7 @@ from app.services.pdf_extraction_service import (
 )
 from app.services.pdf_service import read_pdf_upload
 
+DBSession = Annotated[Session, Depends(get_db)]
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -34,7 +47,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 )
 def create_document(
     document: DocumentCreate,
-    db: Session = Depends(get_db),
+    db: DBSession,
 ) -> DocumentResponse:
     return create_document_service(db, document)
 
@@ -45,7 +58,7 @@ def create_document(
     response_model_exclude_none=True,
 )
 def list_documents(
-    db: Session = Depends(get_db),
+    db: DBSession,
 ) -> list[DocumentResponse]:
     return list_documents_service(db)
 
@@ -57,7 +70,7 @@ def list_documents(
 )
 def get_document(
     document_id: int,
-    db: Session = Depends(get_db),
+    db: DBSession,
 ) -> DocumentResponse:
     document = get_document_service(db, document_id)
 
@@ -78,7 +91,7 @@ def get_document(
 def update_document(
     document_id: int,
     document_update: DocumentUpdate,
-    db: Session = Depends(get_db),
+    db: DBSession,
 ) -> DocumentResponse:
     updated_document = update_document_service(
         db,
@@ -103,7 +116,7 @@ def update_document(
 )
 def delete_document(
     document_id: int,
-    db: Session = Depends(get_db),
+    db: DBSession,
 ) -> None:
     deleted = delete_document_service(db, document_id)
 
@@ -120,8 +133,8 @@ def delete_document(
     status_code=status.HTTP_201_CREATED,
 )
 async def upload_document(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
+    file: Annotated[UploadFile, File()],
+    db: DBSession,
 ) -> DocumentResponse:
     pdf_content = await read_pdf_upload(file)
 

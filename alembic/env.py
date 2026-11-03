@@ -1,11 +1,9 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-
-from app.db.database import Base, DATABASE_URL
+from app.db.database import DATABASE_URL, Base
 from app.models.document import Document  # noqa: F401  Registers the table in Base.metadata.
 
 # this is the Alembic Config object, which provides

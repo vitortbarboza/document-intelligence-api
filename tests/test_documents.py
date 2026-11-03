@@ -1,10 +1,9 @@
-import pytest
 import pymupdf
+import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services import pdf_extraction_service
-
 
 client = TestClient(app)
 
@@ -139,9 +138,7 @@ def test_get_document_not_found():
     response = client.get("/documents/9999")
 
     assert response.status_code == 404
-    assert response.json() == {
-        "detail": "Document not found"
-    }
+    assert response.json() == {"detail": "Document not found"}
 
 
 # Verify that a partial update changes only the provided field.
@@ -289,21 +286,17 @@ def test_delete_document_valid():
     create_response = client.post("/documents", json=payload)
     document_id = create_response.json()["id"]
 
-    delete_response = client.delete(
-        f"/documents/{document_id}"
-    )
+    delete_response = client.delete(f"/documents/{document_id}")
 
     assert delete_response.status_code == 204
     assert delete_response.content == b""
 
-    get_response = client.get(
-        f"/documents/{document_id}"
-    )
+    get_response = client.get(f"/documents/{document_id}")
 
     assert get_response.status_code == 404
     assert get_response.json() == {
         "detail": "Document not found",
-    } 
+    }
 
 
 # Verify that deleting a nonexistent document returns HTTP 404.
@@ -623,9 +616,7 @@ def test_upload_pdf_size_limit(file_size, expected_status):
     assert response.status_code == expected_status
 
     if expected_status == 413:
-        assert response.json()["detail"] == (
-            "PDF file exceeds the 10 MB size limit"
-        )
+        assert response.json()["detail"] == ("PDF file exceeds the 10 MB size limit")
     else:
         assert "PDF size limit test" in response.json()["extracted_text"]
 
@@ -647,9 +638,7 @@ def test_upload_corrupted_pdf():
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"] == (
-        "Unable to extract text from an invalid PDF"
-    )
+    assert response.json()["detail"] == ("Unable to extract text from an invalid PDF")
 
 
 # Verify that password-protected PDFs are rejected by the upload endpoint.
@@ -678,9 +667,7 @@ def test_upload_password_protected_pdf():
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"] == (
-        "Password-protected PDFs are not supported"
-    )
+    assert response.json()["detail"] == ("Password-protected PDFs are not supported")
 
 
 # Verify that uploaded PDFs support listing, updating, and deletion.
@@ -712,10 +699,7 @@ def test_uploaded_pdf_crud_lifecycle():
     list_response = client.get("/documents")
 
     assert list_response.status_code == 200
-    assert any(
-        item["id"] == document_id
-        for item in list_response.json()
-    )
+    assert any(item["id"] == document_id for item in list_response.json())
 
     # Update the document title.
     update_response = client.patch(

@@ -1,6 +1,5 @@
 import pymupdf
 
-
 MAX_PDF_PAGES = 500
 MAX_EXTRACTED_TEXT_LENGTH = 2_000_000
 PAGE_SEPARATOR = "\n"
@@ -23,12 +22,9 @@ def extract_pdf_data(pdf_content: bytes) -> dict:
     try:
         # Open the PDF and extract its content and metadata.
         with pymupdf.open(stream=pdf_content, filetype="pdf") as document:
-
             # Reject password-protected documents.
             if document.needs_pass:
-                raise PDFExtractionError(
-                    "Password-protected PDFs are not supported"
-                )
+                raise PDFExtractionError("Password-protected PDFs are not supported")
 
             if document.page_count > MAX_PDF_PAGES:
                 raise PDFLimitExceededError(
@@ -60,9 +56,7 @@ def extract_pdf_data(pdf_content: bytes) -> dict:
             }
 
     except PYMUPDF_ERRORS as exc:
-        raise PDFExtractionError(
-            "Unable to extract text from an invalid PDF"
-        ) from exc
+        raise PDFExtractionError("Unable to extract text from an invalid PDF") from exc
 
 
 def extract_pdf_text(pdf_content: bytes) -> str:

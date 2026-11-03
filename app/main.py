@@ -1,9 +1,8 @@
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 
-from app.api.routes.health import router as health_router
 from app.api.routes.documents import router as documents_router
-
+from app.api.routes.health import router as health_router
 
 app = FastAPI(title="Document Intelligence API", version="0.1.0")
 

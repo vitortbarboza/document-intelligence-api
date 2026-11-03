@@ -1,6 +1,5 @@
 from fastapi import HTTPException, UploadFile, status
 
-
 MAX_PDF_SIZE = 10 * 1024 * 1024
 PDF_SIGNATURE = b"%PDF-"
 

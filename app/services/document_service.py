@@ -10,7 +10,6 @@ from app.schemas.document import (
     DocumentUpdate,
 )
 
-
 DEFAULT_PDF_FILENAME = "untitled.pdf"
 
 
@@ -34,10 +33,7 @@ def list_documents(db: Session) -> list[DocumentResponse]:
     stored_documents = document_repository.get_all_documents(db)
 
     # Convert ORM objects into Pydantic responses.
-    return [
-        DocumentResponse.model_validate(document)
-        for document in stored_documents
-    ]
+    return [DocumentResponse.model_validate(document) for document in stored_documents]
 
 
 def get_document(

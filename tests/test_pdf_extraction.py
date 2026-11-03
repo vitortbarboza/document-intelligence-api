@@ -5,8 +5,8 @@ from app.services import pdf_extraction_service
 from app.services.pdf_extraction_service import (
     PDFExtractionError,
     PDFLimitExceededError,
-    extract_pdf_text,
     extract_pdf_data,
+    extract_pdf_text,
 )
 
 
@@ -50,7 +50,7 @@ def test_extract_pdf_text_multiple_pages():
 
     assert "Content from page one" in extracted_text
     assert "Content from page two" in extracted_text
-    assert "Content from page three" in extracted_text    
+    assert "Content from page three" in extracted_text
 
 
 # Verify that a PDF without text returns an empty string.

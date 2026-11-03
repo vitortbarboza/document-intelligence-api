@@ -149,17 +149,13 @@ def test_delete_document_from_database(db_client):
     document_id = create_response.json()["id"]
 
     # Delete the document.
-    delete_response = db_client.delete(
-        f"/documents/{document_id}"
-    )
+    delete_response = db_client.delete(f"/documents/{document_id}")
 
     assert delete_response.status_code == 204
     assert delete_response.content == b""
 
     # Verify the document no longer exists.
-    get_response = db_client.get(
-        f"/documents/{document_id}"
-    )
+    get_response = db_client.get(f"/documents/{document_id}")
 
     assert get_response.status_code == 404
 
@@ -168,9 +164,7 @@ def test_delete_document_not_found_in_database(db_client):
     response = db_client.delete("/documents/999")
 
     assert response.status_code == 404
-    assert response.json() == {
-        "detail": "Document not found"
-    }
+    assert response.json() == {"detail": "Document not found"}
 
 
 def test_upload_pdf_persists_in_database(

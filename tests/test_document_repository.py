@@ -1,5 +1,4 @@
 import pytest
-
 from sqlalchemy.exc import IntegrityError
 
 from app.repositories.document_repository import (
@@ -9,7 +8,6 @@ from app.repositories.document_repository import (
     get_document_by_id,
     update_document,
 )
-
 from app.schemas.document import DocumentResponse
 
 

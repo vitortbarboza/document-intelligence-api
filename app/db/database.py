@@ -5,7 +5,6 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # An absolute default keeps the API and Alembic on the same file
