@@ -17,15 +17,22 @@ def create_document(
     db: Session,
     document: DocumentCreate,
 ) -> DocumentResponse:
-    # Persist the document using the repository.
-    new_document = document_repository.create_document(
-        db=db,
-        title=document.title,
-        description=document.description,
-    )
+    try:
+        new_document = document_repository.create_document(
+            db=db,
+            title=document.title,
+            description=document.description,
+        )
 
-    # Convert the ORM object into a Pydantic response.
-    return DocumentResponse.model_validate(new_document)
+        response = DocumentResponse.model_validate(new_document)
+
+        db.commit()
+
+        return response
+
+    except Exception:
+        db.rollback()
+        raise
 
 
 def list_documents(db: Session) -> list[DocumentResponse]:
@@ -58,32 +65,52 @@ def update_document(
     document_id: int,
     document_update: DocumentUpdate,
 ) -> DocumentResponse | None:
-    # Extract only the fields provided in the request.
-    update_data = document_update.model_dump(exclude_unset=True)
+    try:
+        # Extract only the fields provided in the request.
+        update_data = document_update.model_dump(exclude_unset=True)
 
-    # Update the document in the database.
-    updated_document = document_repository.update_document(
-        db=db,
-        document_id=document_id,
-        **update_data,
-    )
+        # Update the document in the database.
+        updated_document = document_repository.update_document(
+            db=db,
+            document_id=document_id,
+            **update_data,
+        )
 
-    if updated_document is None:
-        return None
+        if updated_document is None:
+            return None
 
-    # Convert the ORM object into a Pydantic response.
-    return DocumentResponse.model_validate(updated_document)
+        # Convert the ORM object into a Pydantic response.
+        response = DocumentResponse.model_validate(updated_document)
+
+        db.commit()
+
+        return response
+
+    except Exception:
+        db.rollback()
+        raise
 
 
 def delete_document(
     db: Session,
     document_id: int,
 ) -> bool:
-    # Delete the document using the repository.
-    return document_repository.delete_document(
-        db=db,
-        document_id=document_id,
-    )
+    try:
+        deleted = document_repository.delete_document(
+            db=db,
+            document_id=document_id,
+        )
+
+        if not deleted:
+            return False
+
+        db.commit()
+
+        return True
+
+    except Exception:
+        db.rollback()
+        raise
 
 
 def normalize_filename(filename: str | None) -> str:
@@ -116,15 +143,24 @@ def create_document_from_pdf(
     # Normalize the uploaded filename.
     safe_filename = normalize_filename(filename)
 
-    # Persist the extracted PDF information.
-    document = document_repository.create_document(
-        db=db,
-        title=safe_filename,
-        description="Document uploaded from PDF",
-        filename=safe_filename,
-        page_count=page_count,
-        extracted_text=extracted_text,
-    )
+    try:
+        # Persist the extracted PDF information.
+        document = document_repository.create_document(
+            db=db,
+            title=safe_filename,
+            description="Document uploaded from PDF",
+            filename=safe_filename,
+            page_count=page_count,
+            extracted_text=extracted_text,
+        )
 
-    # Convert the ORM object into a Pydantic response.
-    return DocumentResponse.model_validate(document)
+        # Convert the ORM object into a Pydantic response.
+        response = DocumentResponse.model_validate(document)
+
+        db.commit()
+
+        return response
+
+    except Exception:
+        db.rollback()
+        raise

@@ -8,9 +8,7 @@ def get_document_by_id(
     db: Session,
     document_id: int,
 ) -> Document | None:
-    statement = select(Document).where(Document.id == document_id)
-
-    return db.scalar(statement)
+    return db.get(Document, document_id)
 
 
 def create_document(
@@ -29,13 +27,8 @@ def create_document(
         extracted_text=extracted_text,
     )
 
-    try:
-        db.add(document)
-        db.commit()
-        db.refresh(document)
-    except Exception:
-        db.rollback()
-        raise
+    db.add(document)
+    db.flush()
 
     return document
 
@@ -57,18 +50,13 @@ def update_document(
     if document is None:
         return None
 
-    try:
-        if title is not None:
-            document.title = title
+    if title is not None:
+        document.title = title
 
-        if description is not None:
-            document.description = description
+    if description is not None:
+        document.description = description
 
-        db.commit()
-        db.refresh(document)
-    except Exception:
-        db.rollback()
-        raise
+    db.flush()
 
     return document
 
@@ -82,11 +70,7 @@ def delete_document(
     if document is None:
         return False
 
-    try:
-        db.delete(document)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+    db.delete(document)
+    db.flush()
 
     return True
