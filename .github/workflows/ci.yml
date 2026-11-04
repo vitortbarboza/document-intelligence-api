@@ -7,31 +7,66 @@ on:
   pull_request:
     branches: [main]
 
+# The jobs only read the repository.
+permissions:
+  contents: read
+
+# Cancel superseded runs for the same branch or pull request.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality-and-tests:
     name: Code Quality and Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version-file: ".python-version"
 
+      # Keep in sync with the uv version used in the Dockerfile.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.20"
+          enable-cache: true
+
+      # Fails if uv.lock is out of date with pyproject.toml.
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .
-          python -m pip install pytest httpx2 ruff
+        run: uv sync --locked
 
       - name: Check code quality
-        run: ruff check .
+        run: uv run --locked ruff check .
 
       - name: Check code formatting
-        run: ruff format --check .
+        run: uv run --locked ruff format --check .
 
       - name: Run tests
-        run: python -m pytest -v
+        run: uv run --locked pytest -v --cov
+
+  docker:
+    name: Docker Build and Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: docker build --tag document-intelligence-api:ci .
+
+      # Uses a temporary volume that the script removes when it finishes.
+      - name: Run smoke test
+        run: bash scripts/docker-smoke-test.sh document-intelligence-api:ci

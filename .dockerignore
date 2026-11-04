@@ -1,38 +1,56 @@
+# Docker matches these patterns from the build context root, so "**/"
+# is needed to exclude files inside subdirectories such as app/.
+
 # Python virtual environments
 .venv/
 venv/
 
 # Python cache and compiled files
-__pycache__/
-*.py[cod]
+**/__pycache__/
+**/*.py[cod]
 .pytest_cache/
 .ruff_cache/
 
-# Git metadata
+# Python package metadata
+*.egg-info/
+build/
+dist/
+
+# Git and CI metadata
 .git/
 .gitignore
+.gitattributes
+.github/
 
 # Local environment variables and secrets
-.env
-.env.*
+**/.env
+**/.env.*
 !.env.example
 
 # Local SQLite databases
-*.db
-*.sqlite
-*.sqlite3
+**/*.db
+**/*.db-journal
+**/*.db-wal
+**/*.db-shm
+**/*.sqlite
+**/*.sqlite3
 
 # Test and coverage artifacts
 .coverage
+.coverage.*
 htmlcov/
 .tox/
 
 # Editor and operating system files
 .vscode/
 .idea/
-.DS_Store
-Thumbs.db
+**/.DS_Store
+**/Thumbs.db
 
-# Documentation and tests
+# Container configuration, documentation, scripts and tests
+Dockerfile
+.dockerignore
+compose.yaml
+scripts/
 tests/
 README.md
