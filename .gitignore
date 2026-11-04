@@ -31,3 +31,6 @@ dist/
 # Local editor settings
 .vscode/
 .idea/
+
+# Local database backups
+*-backup.tar
