@@ -1,3 +1,9 @@
+import pytest
+from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
+
+from app.models.document import Document
 from app.repositories import document_repository
 
 
@@ -233,3 +239,43 @@ def test_uploaded_pdf_can_be_retrieved(db_client, make_pdf):
     assert response.json()["filename"] == "persistent.pdf"
     assert response.json()["page_count"] == 1
     assert "Persistent PDF Content" in response.json()["extracted_text"]
+
+
+def test_upload_pdf_database_failure_does_not_persist_document(
+    db_client,
+    db_session,
+    make_pdf,
+    monkeypatch,
+):
+    def fail_commit(self):
+        raise OperationalError("COMMIT", {}, Exception("Simulated commit failure"))
+
+    # Fail every commit while the upload request is processed.
+    monkeypatch.setattr(Session, "commit", fail_commit)
+
+    with pytest.raises(OperationalError):
+        db_client.post(
+            "/documents/upload",
+            files={
+                "file": (
+                    "failed_upload.pdf",
+                    make_pdf("Never persisted"),
+                    "application/pdf",
+                )
+            },
+        )
+
+    monkeypatch.undo()
+
+    # The extracted document must not have been saved.
+    assert db_session.scalars(select(Document)).all() == []
+    assert db_client.get("/documents").json() == []
+
+    # The rolled-back insert does not consume an ID.
+    response = db_client.post(
+        "/documents",
+        json={"title": "After failure", "description": "Created after rollback"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["id"] == 1

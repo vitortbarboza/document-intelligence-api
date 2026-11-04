@@ -1,11 +1,12 @@
 import pytest
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.models.document import Document
 from app.schemas.document import DocumentCreate, DocumentUpdate
 from app.services.document_service import (
     create_document,
+    create_document_from_pdf,
     delete_document,
     update_document,
 )
@@ -279,3 +280,70 @@ def test_delete_document_service_rolls_back_on_error(db_session, monkeypatch):
     # The document must still exist after rollback.
     assert stored_document is not None
     assert stored_document.title == "Document to Preserve"
+
+
+def fail_commit():
+    raise OperationalError("COMMIT", {}, Exception("Simulated commit failure"))
+
+
+def test_create_document_service_rolls_back_when_commit_fails(
+    db_session,
+    session_factory,
+    monkeypatch,
+):
+    original_rollback = db_session.rollback
+    rollback_calls = []
+
+    def tracked_rollback():
+        rollback_calls.append(True)
+        original_rollback()
+
+    # The insert is flushed successfully, but the commit fails.
+    monkeypatch.setattr(db_session, "commit", fail_commit)
+    monkeypatch.setattr(db_session, "rollback", tracked_rollback)
+
+    with pytest.raises(OperationalError):
+        create_document(
+            db=db_session,
+            document=DocumentCreate(
+                title="Never Committed",
+                description="Testing commit failure",
+            ),
+        )
+
+    assert len(rollback_calls) == 1
+
+    # The flushed row must not be visible after the rollback.
+    with session_factory() as verification_session:
+        assert verification_session.scalars(select(Document)).all() == []
+
+
+def test_create_document_from_pdf_rolls_back_when_commit_fails(
+    db_session,
+    session_factory,
+    monkeypatch,
+):
+    monkeypatch.setattr(db_session, "commit", fail_commit)
+
+    with pytest.raises(OperationalError):
+        create_document_from_pdf(
+            db=db_session,
+            filename="never-committed.pdf",
+            page_count=1,
+            extracted_text="Extracted text",
+        )
+
+    monkeypatch.undo()
+
+    # Nothing was persisted, and the session can be reused.
+    with session_factory() as verification_session:
+        assert verification_session.scalars(select(Document)).all() == []
+
+    document = create_document_from_pdf(
+        db=db_session,
+        filename="committed.pdf",
+        page_count=1,
+        extracted_text="Extracted text",
+    )
+
+    assert document.title == "committed.pdf"
