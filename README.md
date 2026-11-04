@@ -21,8 +21,11 @@ O projeto também tem como objetivo aplicar boas práticas de engenharia de soft
 - Alembic
 - PyMuPDF
 - python-multipart
-- pytest
-- HTTPX2
+- pytest, pytest-cov e HTTPX2
+- uv (gerenciamento de dependências e lockfile)
+- Ruff (lint e formatação)
+- Docker e Docker Compose
+- GitHub Actions (integração contínua)
 
 ## Funcionalidades implementadas
 
@@ -66,6 +69,14 @@ alembic/
 └── versions/                        # Migrações do banco de dados
 alembic.ini                          # Configuração do Alembic
 tests/                               # Testes automatizados
+scripts/
+└── docker-smoke-test.sh             # Teste de inicialização do contêiner
+.github/workflows/ci.yml             # Pipeline de integração contínua
+pyproject.toml                       # Metadados, dependências e ferramentas
+uv.lock                              # Versões exatas de todas as dependências
+.python-version                      # Versão do Python usada pelo uv e pela CI
+Dockerfile                           # Imagem da aplicação
+compose.yaml                         # Execução com Docker Compose
 ```
 
 As requisições seguem o fluxo **rotas → services → repositório → banco de dados**. Os services convertem os objetos ORM em schemas Pydantic, de modo que as rotas não manipulam diretamente os modelos do banco.
@@ -75,7 +86,9 @@ As requisições seguem o fluxo **rotas → services → repositório → banco 
 ### Pré-requisitos
 
 - Python 3.13 ou superior
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
 - Git
+- Docker (opcional, para execução em contêiner)
 
 ### Configuração do ambiente
 
@@ -91,39 +104,43 @@ As requisições seguem o fluxo **rotas → services → repositório → banco 
    cd document-intelligence-api
    ```
 
-3. Crie o ambiente virtual:
+3. Crie o ambiente virtual e instale o projeto com as dependências de desenvolvimento, nas versões exatas do `uv.lock`:
 
    ```powershell
-   python -m venv .venv
+   uv sync --locked
    ```
 
-4. Ative o ambiente virtual no Windows:
+   O comando cria o diretório `.venv`, se necessário, e remove dele pacotes que não estejam declarados no projeto. A opção `--locked` falha se o `uv.lock` estiver desatualizado em relação ao `pyproject.toml`, em vez de alterá-lo silenciosamente.
+
+4. Crie o banco de dados aplicando as migrações:
 
    ```powershell
-   .\.venv\Scripts\Activate.ps1
-   ```
-
-5. Instale o projeto e as dependências de desenvolvimento:
-
-   ```powershell
-   python -m pip install -e .
-   python -m pip install --group dev
-   ```
-
-6. Crie o banco de dados aplicando as migrações:
-
-   ```powershell
-   python -m alembic upgrade head
+   uv run alembic upgrade head
    ```
 
    Esse passo é obrigatório antes da primeira execução da API e sempre que novas migrações forem adicionadas. Sem ele, a tabela `documents` não existe e as requisições retornam erro `500`.
 
+Os comandos deste documento usam `uv run`, que executa o comando no ambiente virtual do projeto. Alternativamente, ative o ambiente (`.\.venv\Scripts\Activate.ps1` no Windows) e execute os comandos diretamente, por exemplo `python -m alembic upgrade head`.
+
+### Gerenciamento de dependências
+
+As dependências são declaradas no `pyproject.toml`: as de execução em `[project].dependencies` e as de desenvolvimento (pytest, pytest-cov, HTTPX2 e Ruff) no grupo `dev` de `[dependency-groups]`. O arquivo `uv.lock` registra a versão exata de cada pacote e é utilizado no ambiente local, na CI e na imagem Docker, garantindo as mesmas versões em todos eles.
+
+| Comando | Descrição |
+|---|---|
+| `uv add <pacote>` | Adiciona uma dependência de execução e atualiza o `uv.lock` |
+| `uv add --group dev <pacote>` | Adiciona uma dependência de desenvolvimento |
+| `uv lock --upgrade-package <pacote>` | Atualiza um pacote para a versão mais recente permitida |
+| `uv lock --upgrade` | Atualiza todas as dependências dentro dos limites declarados |
+
+Sempre faça commit do `pyproject.toml` e do `uv.lock` juntos.
+
 ## Execução da API
 
-Com o ambiente virtual ativado e as migrações aplicadas, execute o seguinte comando na raiz do projeto:
+Com as migrações aplicadas, execute o seguinte comando na raiz do projeto:
 
 ```powershell
-python -m uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload
 ```
 
 A API estará disponível nos seguintes endereços:
@@ -167,6 +184,78 @@ python -m alembic -x db_url=sqlite:///C:/caminho/para/outro.db upgrade head
 Como o SQLite não suporta a maioria das alterações de tabela (`ALTER TABLE`), o Alembic está configurado com `render_as_batch=True`. Assim, as migrações geradas recriam a tabela quando necessário.
 
 Antes de aplicar migrações em um banco com dados importantes, recomenda-se fazer uma cópia do arquivo `.db`. Migrações geradas automaticamente devem sempre ser revisadas antes de serem aplicadas.
+
+## Execução com Docker
+
+A imagem usa `python:3.13-slim` e instala apenas as dependências de execução, nas versões do `uv.lock`. Ao iniciar, o contêiner aplica as migrações (`alembic upgrade head`) e depois inicia o Uvicorn na porta `8000`.
+
+Características da imagem:
+
+- A aplicação é executada por um usuário sem privilégios (`app`, UID `10001`), e não como `root`.
+- O banco SQLite fica em `/data/documents.db` (variável `DATABASE_URL`). O diretório `/data` deve ser montado em um volume para que os dados sobrevivam à recriação do contêiner.
+- Um `HEALTHCHECK` consulta `/health` periodicamente; o estado aparece em `docker ps` e `docker compose ps`.
+- As dependências ficam em uma camada separada do código, então alterações no código não reinstalam as dependências.
+
+### Docker Compose (recomendado)
+
+```powershell
+docker compose up -d --build
+```
+
+| Comando | Descrição |
+|---|---|
+| `docker compose ps` | Mostra o estado do contêiner, incluindo o health check |
+| `docker compose logs api` | Exibe os logs das migrações e da API |
+| `docker compose down` | Para e remove o contêiner, preservando o volume |
+
+O Compose:
+
+- Publica a API apenas em `127.0.0.1:8000`, pois ela ainda não possui autenticação.
+- Usa o volume nomeado `document-intelligence-data`, criado automaticamente na primeira execução. Se o volume já existir, ele é reutilizado; nesse caso, o Compose pode avisar que o volume não foi criado por ele, o que pode ser ignorado.
+- Reinicia o contêiner automaticamente (`restart: unless-stopped`), exceto quando ele é parado manualmente.
+
+> **Atenção:** `docker compose down -v` remove o volume e apaga o banco de dados.
+
+### Docker sem Compose
+
+```powershell
+docker build -t document-intelligence-api:0.1.0 .
+docker run -d --name document-intelligence-api `
+  -p 127.0.0.1:8000:8000 `
+  -v document-intelligence-data:/data `
+  document-intelligence-api:0.1.0
+```
+
+### Volumes criados por versões anteriores da imagem
+
+Versões anteriores da imagem executavam a aplicação como `root`; por isso, os arquivos dos volumes criados por elas pertencem ao `root`. Com a imagem atual, a API inicia e permite leituras, mas qualquer escrita falha com o erro `attempt to write a readonly database` (HTTP `500`).
+
+Para corrigir, execute uma única vez, com o contêiner parado:
+
+```powershell
+# 1. Pare a API.
+docker compose down
+
+# 2. Faça um backup do volume em um arquivo .tar no diretório atual.
+docker run --rm `
+  -v document-intelligence-data:/data:ro `
+  -v "${PWD}:/backup" `
+  python:3.13-slim tar -cf /backup/document-intelligence-data-backup.tar -C /data .
+
+# 3. Transfira a propriedade dos arquivos para o usuário da aplicação.
+docker run --rm `
+  -v document-intelligence-data:/data `
+  python:3.13-slim chown -R 10001:10001 /data
+
+# 4. Inicie a API novamente.
+docker compose up -d --build
+```
+
+O passo 3 altera apenas o dono dos arquivos, não o seu conteúdo. Volumes novos não precisam desse procedimento.
+
+### Backup do banco no volume
+
+Copiar o arquivo `documents.db` enquanto a API está gravando pode gerar uma cópia inconsistente. Pare o contêiner antes de fazer o backup (passo 2 acima).
 
 ## Endpoints
 
@@ -270,8 +359,16 @@ O projeto utiliza **pytest** e o **TestClient do FastAPI** para executar testes 
 Para executar todos os testes:
 
 ```powershell
-python -m pytest -v
+uv run pytest -v
 ```
+
+Para executar os testes com relatório de cobertura do código em `app/`:
+
+```powershell
+uv run pytest --cov
+```
+
+O relatório lista as linhas não cobertas de cada arquivo. Não há percentual mínimo obrigatório.
 
 Os testes estão localizados no diretório `tests/`.
 
@@ -280,7 +377,8 @@ Os testes não utilizam o arquivo `documents.db`. Cada teste recebe um banco SQL
 Os testes automatizados cobrem:
 
 - Operações CRUD, validações de dados, tratamento de erros e normalização de textos.
-- Persistência no banco de dados, operações do repositório e rollback após erros de integridade.
+- Persistência no banco de dados, operações do repositório e rollback após erros de integridade e falhas de `commit`, inclusive durante o upload de PDFs.
+- Ciclo de vida da sessão (`get_db`) e configuração do banco por `DATABASE_URL`.
 - Migrações: aplicação completa (`upgrade`), sincronização entre modelos e migrações (`check`), reversão (`downgrade`) e configuração do `AUTOINCREMENT`.
 - Upload de PDFs válidos, com uma ou várias páginas e sem texto extraível.
 - Rejeição de tipos de arquivo inválidos, assinaturas inválidas e arquivos acima de 10 MiB.
@@ -288,6 +386,33 @@ Os testes automatizados cobrem:
 - Limites de páginas e de tamanho do texto extraído.
 - Normalização de nomes de arquivos.
 - Ciclo CRUD completo de documentos criados por upload.
+
+## Qualidade de código
+
+O projeto utiliza o **Ruff** para lint e formatação, configurado no `pyproject.toml`:
+
+```powershell
+uv run ruff check .
+uv run ruff format --check .
+```
+
+Para corrigir automaticamente a formatação, execute `uv run ruff format .`.
+
+## Integração contínua
+
+O workflow `.github/workflows/ci.yml` é executado no GitHub Actions a cada push e pull request para a branch `main`. Ele possui dois jobs, executados em paralelo:
+
+1. **Code Quality and Tests:** instala as dependências com `uv sync --locked` (falha se o `uv.lock` estiver desatualizado), executa o Ruff e roda os testes com relatório de cobertura.
+2. **Docker Build and Smoke Test:** constrói a imagem e executa `scripts/docker-smoke-test.sh`, que inicia o contêiner com um volume temporário e verifica o health check, a aplicação das migrações, o endpoint `/health` e a gravação no banco. O contêiner e o volume são removidos ao final, mesmo em caso de falha.
+
+O workflow tem acesso somente de leitura ao repositório e tempo máximo de execução por job.
+
+O smoke test também pode ser executado localmente (no Windows, pelo Git Bash). Ele usa a porta `18000` e não afeta o volume `document-intelligence-data`:
+
+```bash
+docker build -t document-intelligence-api:smoke-test .
+bash scripts/docker-smoke-test.sh document-intelligence-api:smoke-test
+```
 
 ## Limitações atuais
 
@@ -298,6 +423,8 @@ Os testes automatizados cobrem:
 - O limite de 10 MiB é verificado pela aplicação depois que o corpo da requisição já foi recebido e armazenado temporariamente pelo servidor. Para bloquear requisições muito grandes antes disso, é necessário configurar um limite em um proxy reverso ou em um middleware.
 - A extração de texto é executada de forma síncrona e pode bloquear outras requisições durante o processamento de PDFs grandes.
 - A listagem de documentos não possui paginação e retorna o texto extraído completo de cada PDF.
+- O endpoint `/health` (e o health check do contêiner) indica apenas que a API está respondendo; ele não verifica se o banco de dados está acessível ou gravável.
+- A API não possui autenticação e deve ser exposta apenas localmente.
 
 ## Próximas etapas
 
