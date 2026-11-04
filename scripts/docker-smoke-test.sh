@@ -48,21 +48,25 @@ done
 [ "${status}" = "healthy" ] || fail "container did not become healthy (${status})"
 echo "OK: container is healthy"
 
-docker logs "${CONTAINER}" 2>&1 | grep -q "Running upgrade" \
+# Output is captured before matching so an early grep exit cannot break a pipe.
+logs="$(docker logs "${CONTAINER}" 2>&1)"
+[[ "${logs}" == *"Running upgrade"* ]] \
     || fail "Alembic did not apply any migration to the empty database"
-docker exec "${CONTAINER}" alembic current 2>&1 | grep -q "(head)" \
+revision="$(docker exec "${CONTAINER}" alembic current 2>&1)"
+[[ "${revision}" == *"(head)"* ]] \
     || fail "database is not at the latest migration"
 echo "OK: migrations applied up to head"
 
-curl --fail --silent --show-error "${BASE_URL}/health" | grep -q '"status":"ok"' \
+health="$(curl --fail --silent --show-error "${BASE_URL}/health")" \
     || fail "/health did not respond successfully from the host"
+[[ "${health}" == *'"status":"ok"'* ]] || fail "unexpected /health body: ${health}"
 echo "OK: /health responded from the host"
 
 # Writing a document proves the non-root user can write to the volume.
-created_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+created_status="$(curl --silent --write-out '\n%{http_code}' \
     --header 'Content-Type: application/json' \
     --data '{"title": "Smoke test", "description": "Created by the smoke test"}' \
-    "${BASE_URL}/documents")"
+    "${BASE_URL}/documents" | tail -n 1)"
 [ "${created_status}" = "201" ] \
     || fail "POST /documents returned ${created_status}, expected 201"
 echo "OK: database volume is writable"
