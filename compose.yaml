@@ -1,17 +1,21 @@
 
+# DATABASE_URL, the health check and the migration step are defined in the
+# Dockerfile, so they are not repeated here.
 services:
   api:
     build:
       context: .
       dockerfile: Dockerfile
     image: document-intelligence-api:0.1.0
+    # Publish only on the loopback interface; the API has no authentication.
     ports:
-      - "8000:8000"
-    environment:
-      DATABASE_URL: sqlite:////data/documents.db
+      - "127.0.0.1:8000:8000"
     volumes:
       - document-intelligence-data:/data
+    restart: unless-stopped
 
 volumes:
+  # A fixed name keeps using the volume created before Compose managed it,
+  # and lets Compose create it automatically on a fresh clone.
   document-intelligence-data:
-    external: true
+    name: document-intelligence-data
