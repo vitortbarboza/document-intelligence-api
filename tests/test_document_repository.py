@@ -159,6 +159,8 @@ def test_create_document_rollback_on_integrity_error(db_session):
             title=None,
             description="Invalid document",
         )
+    # The transaction owner must roll back after a failed flush.
+    db_session.rollback()
 
     # Verify that the session can still be used after rollback.
     valid_document = create_document(
@@ -170,7 +172,7 @@ def test_create_document_rollback_on_integrity_error(db_session):
     assert valid_document.id is not None
     assert valid_document.title == "Valid Document"
 
-    # Verify that only the valid document was persisted.
+    # Verify that only the valid document exists in the current transaction.
     documents = get_all_documents(db_session)
 
     assert len(documents) == 1

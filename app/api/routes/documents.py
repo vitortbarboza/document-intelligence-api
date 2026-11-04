@@ -132,11 +132,11 @@ def delete_document(
     response_model=DocumentResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def upload_document(
+def upload_document(
     file: Annotated[UploadFile, File()],
     db: DBSession,
 ) -> DocumentResponse:
-    pdf_content = await read_pdf_upload(file)
+    pdf_content = read_pdf_upload(file)
 
     try:
         pdf_data = extract_pdf_data(pdf_content)

@@ -4,11 +4,7 @@ MAX_PDF_SIZE = 10 * 1024 * 1024
 PDF_SIGNATURE = b"%PDF-"
 
 
-# Starlette spools the full multipart body to a temporary file before the
-# endpoint runs, so this check bounds memory and processing, not the request
-# body itself. Rejecting oversized bodies earlier requires a reverse proxy
-# limit or ASGI middleware.
-async def read_pdf_upload(file: UploadFile) -> bytes:
+def read_pdf_upload(file: UploadFile) -> bytes:
     # Validate the declared content type.
     if file.content_type != "application/pdf":
         raise HTTPException(
@@ -16,9 +12,8 @@ async def read_pdf_upload(file: UploadFile) -> bytes:
             detail="Only PDF files are allowed",
         )
 
-    # Read at most one byte past the limit so oversized files are detected
-    # without loading them entirely.
-    pdf_content = await file.read(MAX_PDF_SIZE + 1)
+    # Read at most one byte beyond the allowed size.
+    pdf_content = file.file.read(MAX_PDF_SIZE + 1)
 
     # Validate the PDF file signature.
     if not pdf_content.startswith(PDF_SIGNATURE):
