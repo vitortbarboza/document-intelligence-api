@@ -35,7 +35,7 @@ jobs:
 
       # Keep in sync with the uv version used in the Dockerfile.
       - name: Set up uv
-        uses: astral-sh/setup-uv@v10
+        uses: astral-sh/setup-uv@v6
         with:
           version: "0.12.20"
           enable-cache: true
