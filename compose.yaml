@@ -1,0 +1,17 @@
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: document-intelligence-api:0.1.0
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: sqlite:////data/documents.db
+    volumes:
+      - document-intelligence-data:/data
+
+volumes:
+  document-intelligence-data:
+    external: true
