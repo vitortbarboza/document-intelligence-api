@@ -12,9 +12,10 @@ from app.models.document import Document
 from app.repositories import document_repository
 
 
-# Import the database module in a fresh interpreter and return the engine URL.
+# Import the database module in a fresh interpreter and return the path of the
+# database file used by the engine.
 # A subprocess avoids re-importing the module, which would redefine Base.
-def read_engine_url(working_directory, database_url=None):
+def read_database_path(working_directory, database_url=None):
     env = os.environ.copy()
     env.pop("DATABASE_URL", None)
     env["PYTHONPATH"] = str(PROJECT_ROOT)
@@ -26,7 +27,7 @@ def read_engine_url(working_directory, database_url=None):
         [
             sys.executable,
             "-c",
-            "from app.db.database import engine; print(engine.url)",
+            "from app.db.database import engine; print(engine.url.database)",
         ],
         cwd=working_directory,
         env=env,
@@ -41,16 +42,16 @@ def read_engine_url(working_directory, database_url=None):
 # Verify that the default database is in the project root,
 # even when the process starts from another directory.
 def test_database_url_defaults_to_project_root(tmp_path):
-    expected_url = f"sqlite:///{(PROJECT_ROOT / 'documents.db').as_posix()}"
+    expected_path = (PROJECT_ROOT / "documents.db").as_posix()
 
-    assert read_engine_url(tmp_path) == expected_url
+    assert read_database_path(tmp_path) == expected_path
 
 
 # Verify that DATABASE_URL overrides the default database.
 def test_database_url_from_environment(tmp_path):
-    database_url = f"sqlite:///{(tmp_path / 'custom.db').as_posix()}"
+    database_path = (tmp_path / "custom.db").as_posix()
 
-    assert read_engine_url(tmp_path, database_url) == database_url
+    assert read_database_path(tmp_path, f"sqlite:///{database_path}") == database_path
 
 
 # Verify the request lifecycle of the real get_db dependency: it yields a
