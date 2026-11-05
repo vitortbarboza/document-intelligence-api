@@ -15,6 +15,7 @@ O projeto também tem como objetivo aplicar boas práticas de engenharia de soft
 - Python 3.13+
 - FastAPI
 - Pydantic
+- Pydantic Settings (gerenciamento de configurações)
 - Uvicorn
 - SQLAlchemy (ORM)
 - SQLite
@@ -53,6 +54,8 @@ app/
 ├── api/routes/
 │   ├── documents.py                 # Endpoints de documentos e upload
 │   └── health.py                    # Health check
+├── core/
+│   └── config.py                    # Configurações centralizadas da aplicação
 ├── db/
 │   └── database.py                  # Engine, sessões e dependência get_db
 ├── models/
@@ -121,6 +124,28 @@ As requisições seguem o fluxo **rotas → services → repositório → banco 
    Esse passo é obrigatório antes da primeira execução da API e sempre que novas migrações forem adicionadas. Sem ele, a tabela `documents` não existe e as requisições retornam erro `500`.
 
 Os comandos deste documento usam `uv run`, que executa o comando no ambiente virtual do projeto. Alternativamente, ative o ambiente (`.\.venv\Scripts\Activate.ps1` no Windows) e execute os comandos diretamente, por exemplo `python -m alembic upgrade head`.
+
+### Variáveis de ambiente
+
+A aplicação utiliza **Pydantic Settings** para centralizar suas configurações em `app/core/config.py`. É possível definir configurações por variáveis de ambiente ou por um arquivo `.env` na raiz do projeto. O `.env` é sempre lido da raiz do projeto, independentemente do diretório a partir do qual a API ou o Alembic são executados; arquivos `.env` em outros diretórios são ignorados.
+
+Para criar um arquivo local de configuração no PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+| Variável | Descrição | Valor padrão |
+|---|---|---|
+| `DATABASE_URL` | URL de conexão com o banco de dados | SQLite em `documents.db`, com caminho absoluto na raiz do projeto |
+
+As variáveis de ambiente do sistema têm prioridade sobre os valores definidos no `.env`. Se `DATABASE_URL` não for configurada, a aplicação utiliza o valor padrão. Um valor vazio (`DATABASE_URL=`) é rejeitado com um erro de validação na inicialização.
+
+Ao definir um banco SQLite, utilize um caminho absoluto (por exemplo, `sqlite:///C:/caminho/para/documents.db`). Com um caminho relativo, o arquivo passa a depender do diretório de execução, e a API e o Alembic podem acabar usando bancos diferentes.
+
+O `.env` é ignorado pelo Git, enquanto `.env.example` é versionado e contém apenas exemplos. No `.env.example`, a configuração `DATABASE_URL` fica comentada para que a simples cópia do arquivo não altere o banco padrão.
+
+No Docker, `DATABASE_URL` é definida para utilizar `/data/documents.db`, mantendo o banco no volume configurado.
 
 ### Gerenciamento de dependências
 
@@ -379,6 +404,7 @@ Os testes automatizados cobrem:
 - Operações CRUD, validações de dados, tratamento de erros e normalização de textos.
 - Persistência no banco de dados, operações do repositório e rollback após erros de integridade e falhas de `commit`, inclusive durante o upload de PDFs.
 - Ciclo de vida da sessão (`get_db`) e configuração do banco por `DATABASE_URL`.
+- Configurações: valor padrão, leitura do `.env` da raiz do projeto, prioridade das variáveis de ambiente e rejeição de `DATABASE_URL` vazia.
 - Migrações: aplicação completa (`upgrade`), sincronização entre modelos e migrações (`check`), reversão (`downgrade`) e configuração do `AUTOINCREMENT`.
 - Upload de PDFs válidos, com uma ou várias páginas e sem texto extraível.
 - Rejeição de tipos de arquivo inválidos, assinaturas inválidas e arquivos acima de 10 MiB.

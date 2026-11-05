@@ -2,7 +2,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect
 
 from alembic import command
-from app.db.database import PROJECT_ROOT
+from app.core.config import PROJECT_ROOT
 
 
 # Build an Alembic configuration pointing to a temporary SQLite database.

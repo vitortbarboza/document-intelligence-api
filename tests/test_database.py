@@ -6,8 +6,9 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import PROJECT_ROOT
 from app.db import database
-from app.db.database import PROJECT_ROOT, get_db
+from app.db.database import get_db
 from app.models.document import Document
 from app.repositories import document_repository
 
@@ -15,13 +16,12 @@ from app.repositories import document_repository
 # Import the database module in a fresh interpreter and return the path of the
 # database file used by the engine.
 # A subprocess avoids re-importing the module, which would redefine Base.
-def read_database_path(working_directory, database_url=None):
+# The default URL is tested in test_config.py, isolated from any local .env;
+# here the environment variable takes precedence over .env.
+def read_database_path(working_directory, database_url):
     env = os.environ.copy()
-    env.pop("DATABASE_URL", None)
     env["PYTHONPATH"] = str(PROJECT_ROOT)
-
-    if database_url is not None:
-        env["DATABASE_URL"] = database_url
+    env["DATABASE_URL"] = database_url
 
     result = subprocess.run(
         [
@@ -39,15 +39,8 @@ def read_database_path(working_directory, database_url=None):
     return result.stdout.strip()
 
 
-# Verify that the default database is in the project root,
-# even when the process starts from another directory.
-def test_database_url_defaults_to_project_root(tmp_path):
-    expected_path = (PROJECT_ROOT / "documents.db").as_posix()
-
-    assert read_database_path(tmp_path) == expected_path
-
-
-# Verify that DATABASE_URL overrides the default database.
+# Verify that the engine uses DATABASE_URL, even when the process starts
+# from another directory.
 def test_database_url_from_environment(tmp_path):
     database_path = (tmp_path / "custom.db").as_posix()
 
